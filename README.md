@@ -71,3 +71,4 @@ npm run dist:dir
 - レース情報 2 行表示
 - 診断結果テーブル表示（`reason` 改行維持、`A(86)` 表示）
 - 表示クリア
+- PWA 自動更新（本番環境で Service Worker を自動更新）

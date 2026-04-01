@@ -2,6 +2,7 @@ import { StrictMode, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { CssBaseline, PaletteMode, ThemeProvider, createTheme } from "@mui/material";
 import App from "./App";
+import { registerPwaAutoUpdate } from "./pwaAutoUpdate";
 
 const COLOR_MODE_STORAGE_KEY = "evaluation-viewer-color-mode";
 
@@ -79,3 +80,7 @@ createRoot(document.getElementById("root")!).render(
     <RootApp />
   </StrictMode>
 );
+
+if (import.meta.env.PROD) {
+  registerPwaAutoUpdate();
+}
