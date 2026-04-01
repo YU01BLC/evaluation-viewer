@@ -24,6 +24,16 @@ npm run build
 
 - これは Web アセット（`dist/`）のみを生成します。
 
+## アイコン生成（iPhone / Android 共通ソース）
+
+- 元画像を `public/icon-source.png` に置くか、以下のコマンドで直接指定します。
+
+```bash
+npm run icons:generate -- /Users/yusukemiyauchi/Desktop/evaluation-viewer-favicon.png
+```
+
+- `favicon`, `apple-touch-icon`, `icon-192`, `icon-512` などを一括生成します。
+
 ## 配布用アプリ生成（macOS）
 
 ```bash
