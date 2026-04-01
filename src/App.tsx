@@ -4,6 +4,7 @@ import {
   Box,
   Button,
   Container,
+  IconButton,
   Paper,
   Snackbar,
   Stack,
@@ -15,6 +16,7 @@ import {
   TableRow,
   TableSortLabel,
   TextField,
+  Tooltip,
   Typography,
   useMediaQuery,
   useTheme
@@ -26,6 +28,8 @@ import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import UploadFileRoundedIcon from "@mui/icons-material/UploadFileRounded";
 import OpenInNewRoundedIcon from "@mui/icons-material/OpenInNewRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
+import LightModeRoundedIcon from "@mui/icons-material/LightModeRounded";
+import DarkModeRoundedIcon from "@mui/icons-material/DarkModeRounded";
 import { ZodIssue } from "zod";
 import { DiagnosisShareData, diagnosisShareSchema } from "./shareSchema";
 import {
@@ -71,6 +75,11 @@ type SortKey = "rating" | "number";
 type SortDirection = "asc" | "desc";
 type CurrentPage = "list" | "loader";
 
+type AppProps = {
+  colorMode: "light" | "dark";
+  onToggleColorMode: () => void;
+};
+
 const ratingOrder: Record<DiagnosisShareData["results"][number]["rating"], number> = {
   S: 5,
   A: 4,
@@ -99,7 +108,7 @@ const toRecordSubtitle = (data: DiagnosisShareData) =>
     withSuffix(data.raceInfo.holdingDay, "日")
   ]);
 
-export default function App() {
+export default function App({ colorMode, onToggleColorMode }: AppProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
@@ -277,6 +286,8 @@ export default function App() {
     }
   };
 
+  const colorModeButtonLabel = colorMode === "dark" ? "ライトモードへ切り替え" : "ダークモードへ切り替え";
+
   return (
     <Box sx={{ minHeight: "100vh", py: 3 }}>
       <Container maxWidth={false} sx={{ px: { xs: 1.5, md: 4 } }}>
@@ -291,13 +302,20 @@ export default function App() {
               <Typography component="h1" variant="h4" fontWeight={700}>
                 全頭診断一覧
               </Typography>
-              <Button
-                variant="contained"
-                startIcon={<UploadFileRoundedIcon />}
-                onClick={() => setCurrentPage("loader")}
-              >
-                全頭診断読み込み
-              </Button>
+              <Stack direction="row" spacing={1} justifyContent="flex-end">
+                <Tooltip title={colorModeButtonLabel}>
+                  <IconButton color="inherit" aria-label={colorModeButtonLabel} onClick={onToggleColorMode}>
+                    {colorMode === "dark" ? <LightModeRoundedIcon /> : <DarkModeRoundedIcon />}
+                  </IconButton>
+                </Tooltip>
+                <Button
+                  variant="contained"
+                  startIcon={<UploadFileRoundedIcon />}
+                  onClick={() => setCurrentPage("loader")}
+                >
+                  全頭診断読み込み
+                </Button>
+              </Stack>
             </Stack>
 
             <Paper variant="outlined" sx={{ p: 2, borderColor: "divider" }}>
@@ -416,13 +434,20 @@ export default function App() {
               <Typography component="h1" variant="h4" fontWeight={700}>
                 全頭診断読み込み
               </Typography>
-              <Button
-                variant="outlined"
-                startIcon={<ArrowBackRoundedIcon />}
-                onClick={() => setCurrentPage("list")}
-              >
-                一覧に戻る
-              </Button>
+              <Stack direction="row" spacing={1} justifyContent="flex-end">
+                <Tooltip title={colorModeButtonLabel}>
+                  <IconButton color="inherit" aria-label={colorModeButtonLabel} onClick={onToggleColorMode}>
+                    {colorMode === "dark" ? <LightModeRoundedIcon /> : <DarkModeRoundedIcon />}
+                  </IconButton>
+                </Tooltip>
+                <Button
+                  variant="outlined"
+                  startIcon={<ArrowBackRoundedIcon />}
+                  onClick={() => setCurrentPage("list")}
+                >
+                  一覧に戻る
+                </Button>
+              </Stack>
             </Stack>
 
             <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2.5 }, borderColor: "divider" }}>
