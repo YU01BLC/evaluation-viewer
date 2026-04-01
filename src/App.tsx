@@ -74,6 +74,7 @@ const formatSavedAt = (value: string) => {
 type SortKey = "rating" | "number";
 type SortDirection = "asc" | "desc";
 type CurrentPage = "list" | "loader";
+type DiagnosisResultRow = DiagnosisShareData["results"][number];
 
 type AppProps = {
   colorMode: "light" | "dark";
@@ -86,6 +87,27 @@ const ratingOrder: Record<DiagnosisShareData["results"][number]["rating"], numbe
   B: 3,
   C: 2,
   D: 1
+};
+
+const compareByRating = (a: DiagnosisResultRow, b: DiagnosisResultRow) => {
+  const aHasScore = typeof a.score === "number";
+  const bHasScore = typeof b.score === "number";
+
+  // score が両方ある場合は score 優先で比較する（ユーザー表示と一致させる）
+  if (aHasScore && bHasScore) {
+    const scoreComparison = a.score - b.score;
+    if (scoreComparison !== 0) return scoreComparison;
+  }
+
+  // score がないケースや同点時は評価ランクで比較
+  const ratingComparison = ratingOrder[a.rating] - ratingOrder[b.rating];
+  if (ratingComparison !== 0) return ratingComparison;
+
+  // score の有無が異なる同評価では score ありを優先
+  if (aHasScore !== bHasScore) return aHasScore ? 1 : -1;
+
+  // 最後は馬番で安定化
+  return a.number - b.number;
 };
 
 const toRecordTitle = (data: DiagnosisShareData) =>
@@ -250,14 +272,11 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
       let comparison = 0;
 
       if (sortKey === "rating") {
-        comparison = ratingOrder[a.rating] - ratingOrder[b.rating];
-        if (comparison === 0) {
-          comparison = a.number - b.number;
-        }
+        comparison = compareByRating(a, b);
       } else {
         comparison = a.number - b.number;
         if (comparison === 0) {
-          comparison = ratingOrder[a.rating] - ratingOrder[b.rating];
+          comparison = compareByRating(a, b);
         }
       }
 
@@ -597,7 +616,7 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
                           <TableHead>
                             <TableRow>
                               <TableCell
-                                sx={{ width: 84 }}
+                                sx={{ width: 116 }}
                                 sortDirection={sortKey === "rating" ? sortDirection : false}
                               >
                                 <TableSortLabel
@@ -609,7 +628,7 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
                                 </TableSortLabel>
                               </TableCell>
                               <TableCell
-                                sx={{ width: 84 }}
+                                sx={{ width: 116 }}
                                 sortDirection={sortKey === "number" ? sortDirection : false}
                               >
                                 <TableSortLabel
