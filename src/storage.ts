@@ -1,4 +1,4 @@
-import { DiagnosisShareData } from "./shareSchema";
+import { DiagnosisShareData, normalizeDiagnosisShareData } from "./shareSchema";
 
 const DB_NAME = "evaluation-viewer-db";
 const STORE_NAME = "diagnosis-share-records";
@@ -8,6 +8,12 @@ export type StoredDiagnosisRecord = {
   id: string;
   savedAt: string;
   data: DiagnosisShareData;
+};
+
+type StoredDiagnosisRecordRow = {
+  id: string;
+  savedAt: string;
+  data: unknown;
 };
 
 const requestToPromise = <T>(request: IDBRequest<T>) =>
@@ -49,10 +55,24 @@ const hashString = (source: string) => {
 
 const buildRecordId = (data: DiagnosisShareData) => {
   const stablePayload = JSON.stringify({
-    raceInfo: data.raceInfo,
-    results: data.results
+    schemaVersion: data.schemaVersion,
+    records: data.records.map((record) => ({
+      raceInfo: record.raceInfo,
+      results: record.results
+    }))
   });
   return hashString(stablePayload);
+};
+
+const normalizeStoredDiagnosisRecord = (row: StoredDiagnosisRecordRow): StoredDiagnosisRecord | null => {
+  const normalizedData = normalizeDiagnosisShareData(row.data);
+  if (!normalizedData) return null;
+
+  return {
+    id: row.id,
+    savedAt: row.savedAt,
+    data: normalizedData
+  };
 };
 
 export const listStoredDiagnosisRecords = async (): Promise<StoredDiagnosisRecord[]> => {
@@ -60,9 +80,12 @@ export const listStoredDiagnosisRecords = async (): Promise<StoredDiagnosisRecor
   try {
     const transaction = db.transaction(STORE_NAME, "readonly");
     const store = transaction.objectStore(STORE_NAME);
-    const rows = await requestToPromise(store.getAll() as IDBRequest<StoredDiagnosisRecord[]>);
+    const rows = await requestToPromise(store.getAll() as IDBRequest<StoredDiagnosisRecordRow[]>);
     await transactionDone(transaction);
-    return rows.sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+    return rows
+      .map((row) => normalizeStoredDiagnosisRecord(row))
+      .filter((row): row is StoredDiagnosisRecord => row !== null)
+      .sort((a, b) => b.savedAt.localeCompare(a.savedAt));
   } finally {
     db.close();
   }
