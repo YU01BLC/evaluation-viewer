@@ -74,14 +74,15 @@ const formatSavedAt = (value: string) => {
 type SortKey = "rating" | "number";
 type SortDirection = "asc" | "desc";
 type CurrentPage = "list" | "loader";
-type DiagnosisResultRow = DiagnosisShareData["results"][number];
+type DiagnosisRaceRecord = DiagnosisShareData["records"][number];
+type DiagnosisResultRow = DiagnosisRaceRecord["results"][number];
 
 type AppProps = {
   colorMode: "light" | "dark";
   onToggleColorMode: () => void;
 };
 
-const ratingOrder: Record<DiagnosisShareData["results"][number]["rating"], number> = {
+const ratingOrder: Record<DiagnosisResultRow["rating"], number> = {
   S: 5,
   A: 4,
   B: 3,
@@ -110,25 +111,79 @@ const compareByRating = (a: DiagnosisResultRow, b: DiagnosisResultRow) => {
   return a.number - b.number;
 };
 
-const toRecordTitle = (data: DiagnosisShareData) =>
+const toRaceTitle = (record: DiagnosisRaceRecord) =>
   joinInfo([
-    data.raceInfo.date,
-    data.raceInfo.venue,
-    withSuffix(data.raceInfo.raceNumber, "R"),
-    data.raceInfo.raceName,
-    data.raceInfo.raceClass
+    record.raceInfo.date,
+    record.raceInfo.venue,
+    withSuffix(record.raceInfo.raceNumber, "R"),
+    record.raceInfo.raceName,
+    record.raceInfo.raceClass
   ]);
 
-const toRecordSubtitle = (data: DiagnosisShareData) =>
+const toRaceSubtitle = (record: DiagnosisRaceRecord) =>
   joinInfo([
-    data.raceInfo.trackType,
-    withSuffix(data.raceInfo.distance, "m"),
-    data.raceInfo.courseDirection,
-    data.raceInfo.trackConfig,
-    data.raceInfo.trackCondition,
-    withSuffix(data.raceInfo.holdingRound, "回"),
-    withSuffix(data.raceInfo.holdingDay, "日")
+    record.raceInfo.trackType,
+    withSuffix(record.raceInfo.distance, "m"),
+    record.raceInfo.courseDirection,
+    record.raceInfo.trackConfig,
+    record.raceInfo.trackCondition,
+    withSuffix(record.raceInfo.holdingRound, "回"),
+    withSuffix(record.raceInfo.holdingDay, "日")
   ]);
+
+const totalHorseCount = (data: DiagnosisShareData) =>
+  data.records.reduce((sum, record) => sum + record.results.length, 0);
+
+const toRecordTitle = (data: DiagnosisShareData) => {
+  if (data.records.length === 1) {
+    return toRaceTitle(data.records[0]);
+  }
+
+  const firstRaceTitle = toRaceTitle(data.records[0]);
+  return firstRaceTitle
+    ? `${data.records.length}レース (${firstRaceTitle} ほか)`
+    : `${data.records.length}レース`;
+};
+
+const toRecordSubtitle = (data: DiagnosisShareData) => {
+  if (data.records.length === 1) {
+    return toRaceSubtitle(data.records[0]);
+  }
+
+  return `全${data.records.length}レース ・ 合計${totalHorseCount(data)}頭`;
+};
+
+const formatRecordSummary = (data: DiagnosisShareData) =>
+  `${data.records.length}レース / ${totalHorseCount(data)}頭`;
+
+const toRaceSelectorLabel = (record: DiagnosisRaceRecord, index: number) => {
+  const detail = joinInfo([
+    record.raceInfo.venue,
+    withSuffix(record.raceInfo.raceNumber, "R"),
+    record.raceInfo.raceName
+  ]);
+  return detail ? `${index + 1}. ${detail}` : `${index + 1}. レース`;
+};
+
+const toEditorJson = (data: DiagnosisShareData) => {
+  if (data.schemaVersion === "diagnosis-table-share/v1" && data.records.length === 1) {
+    const [record] = data.records;
+    return {
+      schemaVersion: "diagnosis-table-share/v1" as const,
+      exportedAt: data.exportedAt,
+      raceInfo: record.raceInfo,
+      results: record.results
+    };
+  }
+
+  return {
+    schemaVersion: "diagnosis-list-share/v1" as const,
+    exportedAt: data.exportedAt,
+    mode: data.mode,
+    recordCount: data.records.length,
+    records: data.records
+  };
+};
 
 export default function App({ colorMode, onToggleColorMode }: AppProps) {
   const theme = useTheme();
@@ -144,6 +199,7 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
   const [isInputExpanded, setIsInputExpanded] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("rating");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [selectedRaceIndex, setSelectedRaceIndex] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const refreshStoredRecords = async () => {
@@ -190,6 +246,7 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
       }
 
       setShareData(validated.data);
+      setSelectedRaceIndex(0);
       setErrorMessage("");
       setIsInputExpanded(false);
       setCurrentPage("loader");
@@ -219,6 +276,7 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
   const handleClearCurrentView = () => {
     setJsonInput("");
     setShareData(null);
+    setSelectedRaceIndex(0);
     setErrorMessage("");
     setIsInputExpanded(true);
   };
@@ -237,12 +295,19 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
     setSortDirection(key === "rating" ? "desc" : "asc");
   };
 
+  const selectedRace = useMemo<DiagnosisRaceRecord | null>(() => {
+    if (!shareData) return null;
+    if (shareData.records.length === 0) return null;
+    const index = Math.min(selectedRaceIndex, shareData.records.length - 1);
+    return shareData.records[index] ?? null;
+  }, [selectedRaceIndex, shareData]);
+
   const raceInfoLines = useMemo(() => {
-    if (!shareData) {
+    if (!selectedRace) {
       return { line1: "", line2: "" };
     }
 
-    const { raceInfo } = shareData;
+    const { raceInfo } = selectedRace;
 
     const line1 = joinInfo([
       raceInfo.date,
@@ -263,12 +328,12 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
     ]);
 
     return { line1, line2 };
-  }, [shareData]);
+  }, [selectedRace]);
 
   const sortedResults = useMemo(() => {
-    if (!shareData) return [];
+    if (!selectedRace) return [];
 
-    return [...shareData.results].sort((a, b) => {
+    return [...selectedRace.results].sort((a, b) => {
       let comparison = 0;
 
       if (sortKey === "rating") {
@@ -282,11 +347,12 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
 
       return sortDirection === "asc" ? comparison : -comparison;
     });
-  }, [shareData, sortDirection, sortKey]);
+  }, [selectedRace, sortDirection, sortKey]);
 
   const handleOpenRecord = (record: StoredDiagnosisRecord) => {
     setShareData(record.data);
-    setJsonInput(JSON.stringify(record.data, null, 2));
+    setSelectedRaceIndex(0);
+    setJsonInput(JSON.stringify(toEditorJson(record.data), null, 2));
     setErrorMessage("");
     setIsInputExpanded(false);
     setCurrentPage("loader");
@@ -363,7 +429,7 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
                             {toRecordSubtitle(record.data)}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            保存日時: {formatSavedAt(record.savedAt)} / {record.data.results.length}頭
+                            保存日時: {formatSavedAt(record.savedAt)} / {formatRecordSummary(record.data)}
                           </Typography>
                           <Stack direction="row" spacing={1}>
                             <Button
@@ -401,7 +467,7 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
                           <TableCell sx={{ width: 180 }}>保存日時</TableCell>
                           <TableCell>レース</TableCell>
                           <TableCell>条件</TableCell>
-                          <TableCell sx={{ width: 96 }}>頭数</TableCell>
+                          <TableCell sx={{ width: 132 }}>対象</TableCell>
                           <TableCell sx={{ width: 170 }}>操作</TableCell>
                         </TableRow>
                       </TableHead>
@@ -411,7 +477,7 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
                             <TableCell>{formatSavedAt(record.savedAt)}</TableCell>
                             <TableCell>{toRecordTitle(record.data)}</TableCell>
                             <TableCell>{toRecordSubtitle(record.data)}</TableCell>
-                            <TableCell>{record.data.results.length}</TableCell>
+                            <TableCell>{formatRecordSummary(record.data)}</TableCell>
                             <TableCell>
                               <Stack direction="row" spacing={1}>
                                 <Button
@@ -485,11 +551,11 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
                     <TextField
                       multiline
                       minRows={8}
-                      label="診断テーブル表示用JSON"
+                      label="診断表示用JSON"
                       value={jsonInput}
                       onChange={(event) => setJsonInput(event.target.value)}
                       fullWidth
-                      placeholder='{"schemaVersion":"diagnosis-table-share/v1", ... }'
+                      placeholder='{"schemaVersion":"diagnosis-list-share/v1","records":[...], ... }'
                     />
 
                     <Stack direction={{ xs: "column", sm: "row" }} spacing={1.2}>
@@ -541,6 +607,37 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
             {shareData ? (
               <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2.5 }, borderColor: "divider" }}>
                 <Stack spacing={2.2}>
+                  {shareData.records.length > 1 && (
+                    <Stack spacing={1}>
+                      <Typography variant="subtitle1" fontWeight={700}>
+                        レース選択
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {shareData.records.length}レース中{" "}
+                        {Math.min(selectedRaceIndex + 1, shareData.records.length)}件目を表示中
+                      </Typography>
+                      <Stack direction="row" spacing={0.8} useFlexGap flexWrap="wrap">
+                        {shareData.records.map((record, index) => (
+                          <Button
+                            key={
+                              record.diagnosisId ??
+                              `${record.raceInfo.date}-${record.raceInfo.venue}-${record.raceInfo.raceNumber}-${index}`
+                            }
+                            size="small"
+                            variant={
+                              Math.min(selectedRaceIndex, shareData.records.length - 1) === index
+                                ? "contained"
+                                : "outlined"
+                            }
+                            onClick={() => setSelectedRaceIndex(index)}
+                          >
+                            {toRaceSelectorLabel(record, index)}
+                          </Button>
+                        ))}
+                      </Stack>
+                    </Stack>
+                  )}
+
                   <Stack spacing={0.7}>
                     <Typography variant="h6" fontWeight={700}>
                       レース情報
