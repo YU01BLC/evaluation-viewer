@@ -26,7 +26,6 @@ import FileOpenRoundedIcon from "@mui/icons-material/FileOpenRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import UploadFileRoundedIcon from "@mui/icons-material/UploadFileRounded";
-import OpenInNewRoundedIcon from "@mui/icons-material/OpenInNewRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import LightModeRoundedIcon from "@mui/icons-material/LightModeRounded";
 import DarkModeRoundedIcon from "@mui/icons-material/DarkModeRounded";
@@ -95,7 +94,7 @@ const compareByRating = (a: DiagnosisResultRow, b: DiagnosisResultRow) => {
   const bHasScore = typeof b.score === "number";
 
   // score が両方ある場合は score 優先で比較する（ユーザー表示と一致させる）
-  if (aHasScore && bHasScore) {
+  if (typeof a.score === "number" && typeof b.score === "number") {
     const scoreComparison = a.score - b.score;
     if (scoreComparison !== 0) return scoreComparison;
   }
@@ -150,19 +149,19 @@ const toRecordSubtitle = (data: DiagnosisShareData) => {
     return toRaceSubtitle(data.records[0]);
   }
 
-  return `全${data.records.length}レース ・ 合計${totalHorseCount(data)}頭`;
+  return `全${data.records.length}レース`;
 };
 
 const formatRecordSummary = (data: DiagnosisShareData) =>
   `${data.records.length}レース / ${totalHorseCount(data)}頭`;
 
-const toRaceSelectorLabel = (record: DiagnosisRaceRecord, index: number) => {
+const toRaceSelectorLabel = (record: DiagnosisRaceRecord) => {
   const detail = joinInfo([
     record.raceInfo.venue,
     withSuffix(record.raceInfo.raceNumber, "R"),
     record.raceInfo.raceName
   ]);
-  return detail ? `${index + 1}. ${detail}` : `${index + 1}. レース`;
+  return detail || "レース";
 };
 
 const toEditorJson = (data: DiagnosisShareData) => {
@@ -196,10 +195,13 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
   const [shareData, setShareData] = useState<DiagnosisShareData | null>(null);
   const [storedRecords, setStoredRecords] = useState<StoredDiagnosisRecord[]>([]);
   const [isRecordsLoading, setIsRecordsLoading] = useState(true);
+  const [listJsonInput, setListJsonInput] = useState("");
+  const [isListInputExpanded, setIsListInputExpanded] = useState(false);
   const [isInputExpanded, setIsInputExpanded] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("rating");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [selectedRaceIndex, setSelectedRaceIndex] = useState(0);
+  const listFileInputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const refreshStoredRecords = async () => {
@@ -228,11 +230,10 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
     }
   };
 
-  const parseAndApply = (source: string): boolean => {
+  const parseShareData = (source: string): DiagnosisShareData | null => {
     if (!source.trim()) {
-      setShareData(null);
       setErrorMessage("JSON入力が空です。貼り付けるかファイルを選択してください。");
-      return false;
+      return null;
     }
 
     try {
@@ -240,27 +241,64 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
       const validated = diagnosisShareSchema.safeParse(parsedJson);
 
       if (!validated.success) {
-        setShareData(null);
         setErrorMessage(`JSONの形式が共有スキーマと一致しません。\n${formatZodIssues(validated.error.issues)}`);
-        return false;
+        return null;
       }
 
-      setShareData(validated.data);
-      setSelectedRaceIndex(0);
       setErrorMessage("");
-      setIsInputExpanded(false);
-      setCurrentPage("loader");
-      void persistShareData(validated.data);
-      return true;
+      return validated.data;
     } catch {
-      setShareData(null);
       setErrorMessage("JSONのパースに失敗しました。構文を確認してください。");
+      return null;
+    }
+  };
+
+  const parseAndApply = (source: string): boolean => {
+    const parsedData = parseShareData(source);
+    if (!parsedData) {
+      setShareData(null);
       return false;
     }
+
+    setShareData(parsedData);
+    setSelectedRaceIndex(0);
+    setIsInputExpanded(false);
+    setCurrentPage("loader");
+    void persistShareData(parsedData);
+    return true;
+  };
+
+  const parseAndStoreForList = (source: string): boolean => {
+    const parsedData = parseShareData(source);
+    if (!parsedData) return false;
+
+    void persistShareData(parsedData);
+    return true;
   };
 
   const handleParseClick = () => {
     parseAndApply(jsonInput);
+  };
+
+  const handleListFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const text = await file.text();
+    const accepted = parseAndStoreForList(text);
+    if (accepted) {
+      setListJsonInput("");
+      setIsListInputExpanded(false);
+    }
+    event.target.value = "";
+  };
+
+  const handleApplyListJsonInput = () => {
+    const accepted = parseAndStoreForList(listJsonInput);
+    if (!accepted) return;
+
+    setListJsonInput("");
+    setIsListInputExpanded(false);
   };
 
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -396,12 +434,64 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
                 <Button
                   variant="contained"
                   startIcon={<UploadFileRoundedIcon />}
-                  onClick={() => setCurrentPage("loader")}
+                  onClick={() => listFileInputRef.current?.click()}
                 >
                   全頭診断読み込み
                 </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={<RefreshRoundedIcon />}
+                  onClick={() => setIsListInputExpanded((prev) => !prev)}
+                >
+                  コピーJSON反映
+                </Button>
+                <input
+                  ref={listFileInputRef}
+                  type="file"
+                  accept=".json,application/json"
+                  hidden
+                  onChange={handleListFileChange}
+                />
               </Stack>
             </Stack>
+
+            {isListInputExpanded && (
+              <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2 }, borderColor: "divider" }}>
+                <Stack spacing={1.2}>
+                  <Typography variant="subtitle1" fontWeight={700}>
+                    コピーした共有JSONを追加
+                  </Typography>
+                  <TextField
+                    multiline
+                    minRows={5}
+                    label="共有JSON"
+                    value={listJsonInput}
+                    onChange={(event) => setListJsonInput(event.target.value)}
+                    fullWidth
+                    placeholder='{"schemaVersion":"diagnosis-list-share/v1","records":[...], ... }'
+                  />
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                    <Button variant="contained" startIcon={<RefreshRoundedIcon />} onClick={handleApplyListJsonInput}>
+                      コピー内容を反映
+                    </Button>
+                    <Button
+                      variant="text"
+                      color="inherit"
+                      startIcon={<DeleteSweepRoundedIcon />}
+                      onClick={() => setListJsonInput("")}
+                    >
+                      入力クリア
+                    </Button>
+                  </Stack>
+                </Stack>
+              </Paper>
+            )}
+
+            {errorMessage && (
+              <Alert severity="error" sx={{ whiteSpace: "pre-line" }}>
+                {errorMessage}
+              </Alert>
+            )}
 
             <Paper variant="outlined" sx={{ p: 2, borderColor: "divider" }}>
               <Stack spacing={1.5}>
@@ -413,7 +503,7 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
                   <Typography color="text.secondary">読み込み中...</Typography>
                 ) : storedRecords.length === 0 ? (
                   <Typography color="text.secondary">
-                    保存済みデータはありません。右上の「全頭診断読み込み」からJSONを取り込むと一覧に保存されます。
+                    保存済みデータはありません。右上の「全頭診断読み込み」からJSONを追加すると一覧に表示されます。
                   </Typography>
                 ) : isMobile ? (
                   <Stack spacing={1.2}>
@@ -421,7 +511,14 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
                       <Paper
                         key={record.id}
                         variant="outlined"
-                        sx={{ p: 1.5, borderColor: "divider", backgroundColor: "background.default" }}
+                        onClick={() => handleOpenRecord(record)}
+                        sx={{
+                          p: 1.5,
+                          borderColor: "divider",
+                          backgroundColor: "background.default",
+                          cursor: "pointer",
+                          "&:hover": { borderColor: "primary.main" }
+                        }}
                       >
                         <Stack spacing={1}>
                           <Typography fontWeight={700}>{toRecordTitle(record.data)}</Typography>
@@ -434,18 +531,13 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
                           <Stack direction="row" spacing={1}>
                             <Button
                               size="small"
-                              variant="outlined"
-                              startIcon={<OpenInNewRoundedIcon />}
-                              onClick={() => handleOpenRecord(record)}
-                            >
-                              表示
-                            </Button>
-                            <Button
-                              size="small"
                               variant="text"
                               color="error"
                               startIcon={<DeleteOutlineRoundedIcon />}
-                              onClick={() => void handleDeleteRecord(record.id)}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handleDeleteRecord(record.id);
+                              }}
                             >
                               削除
                             </Button>
@@ -467,33 +559,34 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
                           <TableCell sx={{ width: 180 }}>保存日時</TableCell>
                           <TableCell>レース</TableCell>
                           <TableCell>条件</TableCell>
-                          <TableCell sx={{ width: 132 }}>対象</TableCell>
-                          <TableCell sx={{ width: 170 }}>操作</TableCell>
+                          <TableCell sx={{ width: 110 }}>操作</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
                         {storedRecords.map((record) => (
-                          <TableRow key={record.id} sx={{ "& td": { borderColor: "divider" } }}>
+                          <TableRow
+                            key={record.id}
+                            hover
+                            onClick={() => handleOpenRecord(record)}
+                            sx={{
+                              "& td": { borderColor: "divider" },
+                              cursor: "pointer"
+                            }}
+                          >
                             <TableCell>{formatSavedAt(record.savedAt)}</TableCell>
                             <TableCell>{toRecordTitle(record.data)}</TableCell>
                             <TableCell>{toRecordSubtitle(record.data)}</TableCell>
-                            <TableCell>{formatRecordSummary(record.data)}</TableCell>
                             <TableCell>
                               <Stack direction="row" spacing={1}>
-                                <Button
-                                  size="small"
-                                  variant="outlined"
-                                  startIcon={<OpenInNewRoundedIcon />}
-                                  onClick={() => handleOpenRecord(record)}
-                                >
-                                  表示
-                                </Button>
                                 <Button
                                   size="small"
                                   variant="text"
                                   color="error"
                                   startIcon={<DeleteOutlineRoundedIcon />}
-                                  onClick={() => void handleDeleteRecord(record.id)}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void handleDeleteRecord(record.id);
+                                  }}
                                 >
                                   削除
                                 </Button>
@@ -517,7 +610,7 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
               justifyContent="space-between"
             >
               <Typography component="h1" variant="h4" fontWeight={700}>
-                全頭診断読み込み
+                レース詳細
               </Typography>
               <Stack direction="row" spacing={1} justifyContent="flex-end">
                 <Tooltip title={colorModeButtonLabel}>
@@ -631,7 +724,7 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
                             }
                             onClick={() => setSelectedRaceIndex(index)}
                           >
-                            {toRaceSelectorLabel(record, index)}
+                            {toRaceSelectorLabel(record)}
                           </Button>
                         ))}
                       </Stack>
