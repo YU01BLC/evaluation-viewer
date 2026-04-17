@@ -76,6 +76,36 @@ type CurrentPage = "list" | "loader";
 type DiagnosisRaceRecord = DiagnosisShareData["records"][number];
 type DiagnosisResultRow = DiagnosisRaceRecord["results"][number];
 
+const formatRaceRecommendationGrade = (record: DiagnosisRaceRecord) => {
+  const grade = record.predictionConfidenceGrade?.trim() ?? "";
+  if (grade) return grade;
+
+  if (typeof record.predictionConfidenceScore === "number") {
+    return `${record.predictionConfidenceScore}点`;
+  }
+
+  return "";
+};
+
+const formatRaceRecommendationWithScore = (record: DiagnosisRaceRecord) => {
+  const grade = record.predictionConfidenceGrade?.trim() ?? "";
+  const score = record.predictionConfidenceScore;
+
+  if (grade && typeof score === "number") {
+    return `${grade}(${score}点)`;
+  }
+
+  if (grade) {
+    return grade;
+  }
+
+  if (typeof score === "number") {
+    return `${score}点`;
+  }
+
+  return "";
+};
+
 type AppProps = {
   colorMode: "light" | "dark";
   onToggleColorMode: () => void;
@@ -156,12 +186,27 @@ const formatRecordSummary = (data: DiagnosisShareData) =>
   `${data.records.length}レース / ${totalHorseCount(data)}頭`;
 
 const toRaceSelectorLabel = (record: DiagnosisRaceRecord) => {
-  const detail = joinInfo([
-    record.raceInfo.venue,
-    withSuffix(record.raceInfo.raceNumber, "R"),
-    record.raceInfo.raceName
-  ]);
-  return detail || "レース";
+  const venue = record.raceInfo.venue?.trim() ?? "";
+  const raceNumber = withSuffix(record.raceInfo.raceNumber, "R");
+  const raceName = record.raceInfo.raceName?.trim() ?? "";
+  const recommendation = formatRaceRecommendationGrade(record);
+
+  const raceHeader =
+    venue && raceNumber ? `${venue}: ${raceNumber}` : venue || raceNumber || "レース";
+
+  if (raceName && recommendation) {
+    return `${raceHeader} ・${raceName}(推奨度: ${recommendation})`;
+  }
+
+  if (raceName) {
+    return `${raceHeader} ・${raceName}`;
+  }
+
+  if (recommendation) {
+    return `${raceHeader}(推奨度: ${recommendation})`;
+  }
+
+  return raceHeader;
 };
 
 const toEditorJson = (data: DiagnosisShareData) => {
@@ -342,30 +387,36 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
 
   const raceInfoLines = useMemo(() => {
     if (!selectedRace) {
-      return { line1: "", line2: "" };
+      return { dateLine: "", venueLine: "", detailLine: "", recommendationLine: "" };
     }
 
     const { raceInfo } = selectedRace;
+    const raceNumber = withSuffix(raceInfo.raceNumber, "R");
 
-    const line1 = joinInfo([
-      raceInfo.date,
-      raceInfo.venue,
-      withSuffix(raceInfo.raceNumber, "R"),
-      raceInfo.raceName,
-      raceInfo.raceClass
-    ]);
+    const dateLine = raceInfo.date?.trim() ?? "";
 
-    const line2 = joinInfo([
+    const venue = raceInfo.venue?.trim() ?? "";
+    const venueLabel = venue && raceNumber ? `${venue}: ${raceNumber}` : venue || raceNumber;
+    const venueLine = venueLabel ? `・${venueLabel}` : "";
+
+    const detailParts = [
+      raceInfo.raceClass,
       raceInfo.trackType,
       withSuffix(raceInfo.distance, "m"),
-      raceInfo.courseDirection,
-      raceInfo.trackConfig,
-      raceInfo.trackCondition,
-      withSuffix(raceInfo.holdingRound, "回"),
-      withSuffix(raceInfo.holdingDay, "日")
-    ]);
+      raceInfo.trackCondition
+    ]
+      .map((value) => value?.trim() ?? "")
+      .filter((value) => value.length > 0);
 
-    return { line1, line2 };
+    const raceName = raceInfo.raceName?.trim() ?? "";
+    const detailSuffix = detailParts.length ? `(${detailParts.join(" / ")})` : "";
+    const detailBody = `${raceName}${detailSuffix}`.trim();
+    const detailLine = detailBody ? `・${detailBody}` : "";
+
+    const recommendation = formatRaceRecommendationWithScore(selectedRace);
+    const recommendationLine = recommendation ? `・推奨度: ${recommendation}` : "";
+
+    return { dateLine, venueLine, detailLine, recommendationLine };
   }, [selectedRace]);
 
   const sortedResults = useMemo(() => {
@@ -735,8 +786,18 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
                     <Typography variant="h6" fontWeight={700}>
                       レース情報
                     </Typography>
-                    <Typography color="text.secondary">{raceInfoLines.line1}</Typography>
-                    <Typography color="text.secondary">{raceInfoLines.line2}</Typography>
+                    {raceInfoLines.dateLine && (
+                      <Typography color="text.secondary">{raceInfoLines.dateLine}</Typography>
+                    )}
+                    {raceInfoLines.venueLine && (
+                      <Typography color="text.secondary">{raceInfoLines.venueLine}</Typography>
+                    )}
+                    {raceInfoLines.detailLine && (
+                      <Typography color="text.secondary">{raceInfoLines.detailLine}</Typography>
+                    )}
+                    {raceInfoLines.recommendationLine && (
+                      <Typography color="text.secondary">{raceInfoLines.recommendationLine}</Typography>
+                    )}
                   </Stack>
 
                   <Stack spacing={1.2}>

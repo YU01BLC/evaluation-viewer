@@ -26,8 +26,16 @@ export const raceInfoSchema = z.object({
   holdingDay: numberOrEmptyOptional
 });
 
+const predictionConfidenceBreakdownSchema = z.record(z.string(), z.number());
+
 export const diagnosisRecordSchema = z.object({
   diagnosisId: z.string().optional(),
+  predictionConfidenceScore: z.number().optional(),
+  predictionConfidenceGrade: z.string().optional(),
+  predictionConfidenceVersion: z.string().optional(),
+  predictionConfidenceBreakdown: predictionConfidenceBreakdownSchema.optional(),
+  predictionConfidenceFlags: z.array(z.string()).optional(),
+  predictionConfidenceComputedAt: z.number().int().optional(),
   raceInfo: raceInfoSchema,
   results: z.array(diagnosisResultSchema)
 });
