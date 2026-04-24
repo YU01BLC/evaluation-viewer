@@ -29,7 +29,6 @@ import UploadFileRoundedIcon from "@mui/icons-material/UploadFileRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import LightModeRoundedIcon from "@mui/icons-material/LightModeRounded";
 import DarkModeRoundedIcon from "@mui/icons-material/DarkModeRounded";
-import { ZodIssue } from "zod";
 import { DiagnosisShareData, diagnosisShareSchema } from "./shareSchema";
 import {
   StoredDiagnosisRecord,
@@ -45,15 +44,6 @@ const joinInfo = (values: Array<string | null | undefined>) =>
     .join(" ・ ");
 
 const withSuffix = (value: number | "", suffix: string) => (value === "" ? "" : `${value}${suffix}`);
-
-const formatZodIssues = (issues: ZodIssue[]) =>
-  issues
-    .slice(0, 8)
-    .map((issue) => {
-      const location = issue.path.length ? issue.path.join(".") : "root";
-      return `- ${location}: ${issue.message}`;
-    })
-    .join("\n");
 
 const formatRating = (rating: string, score?: number) =>
   typeof score === "number" ? `${rating}(${score})` : rating;
@@ -215,6 +205,13 @@ const toEditorJson = (data: DiagnosisShareData) => {
     return {
       schemaVersion: "diagnosis-table-share/v1" as const,
       exportedAt: data.exportedAt,
+      diagnosisId: record.diagnosisId,
+      predictionConfidenceScore: record.predictionConfidenceScore,
+      predictionConfidenceGrade: record.predictionConfidenceGrade,
+      predictionConfidenceVersion: record.predictionConfidenceVersion,
+      predictionConfidenceBreakdown: record.predictionConfidenceBreakdown,
+      predictionConfidenceFlags: record.predictionConfidenceFlags,
+      predictionConfidenceComputedAt: record.predictionConfidenceComputedAt,
       raceInfo: record.raceInfo,
       results: record.results
     };
@@ -269,15 +266,15 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
     try {
       await upsertDiagnosisRecord(data);
       await refreshStoredRecords();
-      setInfoMessage("診断データをローカルに保存しました");
+      setInfoMessage("診断データをこの端末に保存しました");
     } catch {
-      setErrorMessage("ローカル保存に失敗しました。ブラウザの保存設定をご確認ください。");
+      setErrorMessage("この端末への保存に失敗しました。時間をおいて再度お試しください。");
     }
   };
 
   const parseShareData = (source: string): DiagnosisShareData | null => {
     if (!source.trim()) {
-      setErrorMessage("JSON入力が空です。貼り付けるかファイルを選択してください。");
+      setErrorMessage("入力欄が空です。データを貼り付けるか、ファイルを選択してください。");
       return null;
     }
 
@@ -286,14 +283,16 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
       const validated = diagnosisShareSchema.safeParse(parsedJson);
 
       if (!validated.success) {
-        setErrorMessage(`JSONの形式が共有スキーマと一致しません。\n${formatZodIssues(validated.error.issues)}`);
+        setErrorMessage(
+          "貼り付けたデータの形式が正しくありません。コピー元のデータを最初から最後までコピーし直して、もう一度お試しください。"
+        );
         return null;
       }
 
       setErrorMessage("");
       return validated.data;
     } catch {
-      setErrorMessage("JSONのパースに失敗しました。構文を確認してください。");
+      setErrorMessage("データを読み取れませんでした。コピー漏れや余分な文字がないか確認してください。");
       return null;
     }
   };
@@ -487,14 +486,14 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
                   startIcon={<UploadFileRoundedIcon />}
                   onClick={() => listFileInputRef.current?.click()}
                 >
-                  全頭診断読み込み
+                  ファイルを読み込む
                 </Button>
                 <Button
                   variant="outlined"
                   startIcon={<RefreshRoundedIcon />}
                   onClick={() => setIsListInputExpanded((prev) => !prev)}
                 >
-                  コピーJSON反映
+                  コピーしたデータを反映
                 </Button>
                 <input
                   ref={listFileInputRef}
@@ -510,16 +509,16 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
               <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2 }, borderColor: "divider" }}>
                 <Stack spacing={1.2}>
                   <Typography variant="subtitle1" fontWeight={700}>
-                    コピーした共有JSONを追加
+                    コピーしたデータを追加
                   </Typography>
                   <TextField
                     multiline
                     minRows={5}
-                    label="共有JSON"
+                    label="共有データ"
                     value={listJsonInput}
                     onChange={(event) => setListJsonInput(event.target.value)}
                     fullWidth
-                    placeholder='{"schemaVersion":"diagnosis-list-share/v1","records":[...], ... }'
+                    placeholder="ここにコピーしたデータを貼り付けてください"
                   />
                   <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
                     <Button variant="contained" startIcon={<RefreshRoundedIcon />} onClick={handleApplyListJsonInput}>
@@ -554,7 +553,7 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
                   <Typography color="text.secondary">読み込み中...</Typography>
                 ) : storedRecords.length === 0 ? (
                   <Typography color="text.secondary">
-                    保存済みデータはありません。右上の「全頭診断読み込み」からJSONを追加すると一覧に表示されます。
+                    保存済みデータはありません。右上の「ファイルを読み込む」または「コピーしたデータを反映」からデータを追加すると一覧に表示されます。
                   </Typography>
                 ) : isMobile ? (
                   <Stack spacing={1.2}>
@@ -683,10 +682,10 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
               <Stack spacing={2}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center">
                   <Typography variant="h6" fontWeight={700}>
-                    共有JSON入力
+                    共有データ入力
                   </Typography>
                   <Button variant="text" color="inherit" onClick={handleToggleInput}>
-                    {isInputExpanded ? "入力を閉じる" : "JSON入力を開く"}
+                    {isInputExpanded ? "入力欄を閉じる" : "入力欄を開く"}
                   </Button>
                 </Stack>
 
@@ -695,11 +694,11 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
                     <TextField
                       multiline
                       minRows={8}
-                      label="診断表示用JSON"
+                      label="表示するデータ"
                       value={jsonInput}
                       onChange={(event) => setJsonInput(event.target.value)}
                       fullWidth
-                      placeholder='{"schemaVersion":"diagnosis-list-share/v1","records":[...], ... }'
+                      placeholder="ここにコピーしたデータを貼り付けてください"
                     />
 
                     <Stack direction={{ xs: "column", sm: "row" }} spacing={1.2}>
@@ -715,7 +714,7 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
                         startIcon={<FileOpenRoundedIcon />}
                         onClick={() => fileInputRef.current?.click()}
                       >
-                        JSONファイル読込
+                        データファイルを読み込む
                       </Button>
                       <Button
                         variant="text"
@@ -742,7 +741,7 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
                   </>
                 ) : (
                   <Typography color="text.secondary">
-                    JSON入力は折りたたみ中です。更新時は「JSON入力を開く」で再入力してください。
+                    入力欄は閉じています。更新する場合は「入力欄を開く」を押してください。
                   </Typography>
                 )}
               </Stack>
@@ -916,7 +915,7 @@ export default function App({ colorMode, onToggleColorMode }: AppProps) {
             ) : (
               <Paper variant="outlined" sx={{ p: 2.5, borderColor: "divider" }}>
                 <Typography color="text.secondary">
-                  JSONを貼り付けるか、JSONファイルを読み込むと表示されます。表示後は自動的にローカル一覧へ保存されます。
+                  コピーしたデータを貼り付けるか、データファイルを読み込むと表示されます。表示後は自動的にこの端末の一覧へ保存されます。
                 </Typography>
               </Paper>
             )}

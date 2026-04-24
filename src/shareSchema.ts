@@ -28,19 +28,22 @@ export const raceInfoSchema = z.object({
 
 const predictionConfidenceBreakdownSchema = z.record(z.string(), z.number());
 
-export const diagnosisRecordSchema = z.object({
+const diagnosisRecordMetadataSchema = z.object({
   diagnosisId: z.string().optional(),
   predictionConfidenceScore: z.number().optional(),
   predictionConfidenceGrade: z.string().optional(),
   predictionConfidenceVersion: z.string().optional(),
   predictionConfidenceBreakdown: predictionConfidenceBreakdownSchema.optional(),
   predictionConfidenceFlags: z.array(z.string()).optional(),
-  predictionConfidenceComputedAt: z.number().int().optional(),
+  predictionConfidenceComputedAt: z.number().int().optional()
+});
+
+export const diagnosisRecordSchema = diagnosisRecordMetadataSchema.extend({
   raceInfo: raceInfoSchema,
   results: z.array(diagnosisResultSchema)
 });
 
-const diagnosisTableShareSchema = z.object({
+const diagnosisTableShareSchema = diagnosisRecordMetadataSchema.extend({
   schemaVersion: z.literal("diagnosis-table-share/v1"),
   exportedAt: z.string(),
   raceInfo: raceInfoSchema,
@@ -99,6 +102,13 @@ const normalizeDiagnosisShareDataInternal = (data: DiagnosisShareSourceData): Di
     exportedAt: data.exportedAt,
     records: [
       {
+        diagnosisId: data.diagnosisId,
+        predictionConfidenceScore: data.predictionConfidenceScore,
+        predictionConfidenceGrade: data.predictionConfidenceGrade,
+        predictionConfidenceVersion: data.predictionConfidenceVersion,
+        predictionConfidenceBreakdown: data.predictionConfidenceBreakdown,
+        predictionConfidenceFlags: data.predictionConfidenceFlags,
+        predictionConfidenceComputedAt: data.predictionConfidenceComputedAt,
         raceInfo: data.raceInfo,
         results: data.results
       }
